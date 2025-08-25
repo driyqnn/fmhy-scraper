@@ -1,82 +1,104 @@
-import os
+#!/usr/bin/env python3
+"""
+Markdown File Metadata Generator
+
+This script processes a fixed list of Markdown filenames and generates
+structured JSON metadata for each file, including filename, category,
+and GitHub raw URL.
+"""
+
 import json
-import requests
-from datetime import datetime
 
-RAW_MD_BASE = "https://raw.githubusercontent.com/fmhy/edit/main/docs/"
-MD_FILES = [
-    "adblockvpnguide.md", "ai.md", "android-iosguide.md", "audiopiracyguide.md",
-    "beginners-guide.md", "devtools.md", "downloadpiracyguide.md", "edupiracyguide.md",
-    "feedback.md", "file-tools.md", "gaming-tools.md", "gamingpiracyguide.md",
-    "img-tools.md", "index.md", "internet-tools.md", "linuxguide.md", "miscguide.md",
-    "non-english.md", "posts.md", "readingpiracyguide.md", "sandbox.md",
-    "social-media-tools.md", "startpage.md", "storage.md", "system-tools.md",
-    "text-tools.md", "torrentpiracyguide.md", "unsafesites.md", "video-tools.md",
-    "videopiracyguide.md"
-]
 
-MASTER_JSON = "master.json"
-SNAPSHOT_DIR = "snapshots"
+def generate_metadata(filenames):
+    """
+    Generate metadata for each markdown file.
+    
+    Args:
+        filenames (list): List of markdown filenames
+        
+    Returns:
+        list: List of dictionaries containing metadata for each file
+    """
+    metadata = []
+    base_url = "https://raw.githubusercontent.com/fmhy/edit/refs/heads/main/docs/"
+    
+    for filename in filenames:
+        # Extract category by removing .md extension and replacing dashes with spaces
+        category = filename.replace('.md', '').replace('-', ' ')
+        
+        # Construct the raw GitHub URL
+        raw_url = base_url + filename
+        
+        # Create metadata object
+        file_metadata = {
+            "filename": filename,
+            "category": category,
+            "raw_url": raw_url
+        }
+        
+        metadata.append(file_metadata)
+    
+    return metadata
 
-os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 
-def fetch_md(filename):
-    url = RAW_MD_BASE + filename
-    r = requests.get(url)
-    if r.status_code == 200:
-        return r.text
-    else:
-        print(f"Failed to fetch {filename}: {r.status_code}")
-        return ""
+def main():
+    """
+    Main function to process markdown files and generate JSON output.
+    """
+    # Fixed list of markdown filenames
+    markdown_files = [
+        "adblockvpnguide.md",
+        "ai.md",
+        "android-iosguide.md",
+        "audiopiracyguide.md",
+        "beginners-guide.md",
+        "devtools.md",
+        "downloadpiracyguide.md",
+        "edupiracyguide.md",
+        "feedback.md",
+        "file-tools.md",
+        "gaming-tools.md",
+        "gamingpiracyguide.md",
+        "img-tools.md",
+        "index.md",
+        "internet-tools.md",
+        "linuxguide.md",
+        "miscguide.md",
+        "non-english.md",
+        "posts.md",
+        "readingpiracyguide.md",
+        "sandbox.md",
+        "social-media-tools.md",
+        "startpage.md",
+        "storage.md",
+        "system-tools.md",
+        "text-tools.md",
+        "torrentpiracyguide.md",
+        "unsafesites.md",
+        "video-tools.md",
+        "videopiracyguide.md"
+    ]
+    
+    print(f"Processing {len(markdown_files)} markdown files...")
+    
+    # Generate metadata for all files
+    metadata_list = generate_metadata(markdown_files)
+    
+    # Write to JSON file
+    try:
+        with open('output.json', 'w', encoding='utf-8') as f:
+            json.dump(metadata_list, f, indent=2, ensure_ascii=False)
+        
+        print(f"Successfully generated metadata for {len(metadata_list)} files.")
+        print("Output saved to: output.json")
+        
+    except IOError as e:
+        print(f"Error writing to output.json: {e}")
+        return 1
+    
+    return 0
 
-def split_blocks(content):
-    blocks = [b.strip() for b in content.split("\n\n") if b.strip()]
-    sections = []
-    for i, block in enumerate(blocks):
-        sections.append({"id": f"sec{i+1}", "content": block})
-    return sections
-
-def load_master():
-    if os.path.exists(MASTER_JSON):
-        with open(MASTER_JSON, "r", encoding="utf-8") as f:
-            return json.load(f)
-    else:
-        return {"files": []}
-
-def save_master(master):
-    with open(MASTER_JSON, "w", encoding="utf-8") as f:
-        json.dump(master, f, ensure_ascii=False, indent=2)
-
-def update_master():
-    master = load_master()
-    master_files = {f["filename"]: f for f in master["files"]}
-
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-
-    for md in MD_FILES:
-        content = fetch_md(md)
-        sections = split_blocks(content)
-        if md in master_files:
-            master_files[md]["sections"] = sections
-            master_files[md]["last_updated"] = now
-        else:
-            master_files[md] = {
-                "filename": md,
-                "last_updated": now,
-                "sections": sections
-            }
-
-    master["files"] = list(master_files.values())
-    save_master(master)
-
-def save_snapshot():
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    snapshot_file = os.path.join(SNAPSHOT_DIR, f"{today}.json")
-    with open(MASTER_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    with open(snapshot_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
-    update_master()
-    save_snapshot()
+    exit(main())
