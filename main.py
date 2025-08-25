@@ -3,12 +3,7 @@ import json
 import requests
 from datetime import datetime
 
-# Configuration
-RAW_DIR = "raw"
-SNAPSHOT_DIR = "snapshots"
-MASTER_JSON = "master.json"
-
-# List of target Markdown files
+RAW_MD_BASE = "https://raw.githubusercontent.com/fmhy/edit/main/docs/"
 MD_FILES = [
     "adblockvpnguide.md", "ai.md", "android-iosguide.md", "audiopiracyguide.md",
     "beginners-guide.md", "devtools.md", "downloadpiracyguide.md", "edupiracyguide.md",
@@ -20,64 +15,68 @@ MD_FILES = [
     "videopiracyguide.md"
 ]
 
-# Base raw URL for public repo raw files
-RAW_BASE_URL = "https://raw.githubusercontent.com/fmhy/edit/main/docs/"
+MASTER_JSON = "master.json"
+SNAPSHOT_DIR = "snapshots"
 
-# Ensure folders exist
-os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 
-# Load existing master.json if exists
-if os.path.exists(MASTER_JSON):
-    with open(MASTER_JSON, "r", encoding="utf-8") as f:
-        master_data = json.load(f)
-else:
-    master_data = {"files": []}
+def fetch_md(filename):
+    url = RAW_MD_BASE + filename
+    r = requests.get(url)
+    if r.status_code == 200:
+        return r.text
+    else:
+        print(f"Failed to fetch {filename}: {r.status_code}")
+        return ""
 
-# Helper to find a file in master_data
-def find_file(filename):
-    for file_obj in master_data["files"]:
-        if file_obj["filename"] == filename:
-            return file_obj
-    return None
+def split_blocks(content):
+    blocks = [b.strip() for b in content.split("\n\n") if b.strip()]
+    sections = []
+    for i, block in enumerate(blocks):
+        sections.append({"id": f"sec{i+1}", "content": block})
+    return sections
 
-# Fetch each Markdown file
-for md_file in MD_FILES:
-    url = RAW_BASE_URL + md_file
-    response = requests.get(url)
-    if response.status_code != 200:
-        print(f"Failed to fetch {md_file}")
-        continue
+def load_master():
+    if os.path.exists(MASTER_JSON):
+        with open(MASTER_JSON, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return {"files": []}
 
-    content = response.text.strip()
-    blocks = [b for b in content.split("\n\n") if b.strip()]
+def save_master(master):
+    with open(MASTER_JSON, "w", encoding="utf-8") as f:
+        json.dump(master, f, ensure_ascii=False, indent=2)
 
-    # Update or create file entry
-    file_entry = find_file(md_file)
-    if not file_entry:
-        file_entry = {"filename": md_file, "last_updated": "", "sections": []}
-        master_data["files"].append(file_entry)
+def update_master():
+    master = load_master()
+    master_files = {f["filename"]: f for f in master["files"]}
 
-    # Reuse existing section IDs if possible
-    new_sections = []
-    for i, block in enumerate(blocks, start=1):
-        if i <= len(file_entry["sections"]):
-            section_id = file_entry["sections"][i-1]["id"]
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+
+    for md in MD_FILES:
+        content = fetch_md(md)
+        sections = split_blocks(content)
+        if md in master_files:
+            master_files[md]["sections"] = sections
+            master_files[md]["last_updated"] = now
         else:
-            section_id = f"sec{i}"
-        new_sections.append({"id": section_id, "content": block})
+            master_files[md] = {
+                "filename": md,
+                "last_updated": now,
+                "sections": sections
+            }
 
-    file_entry["sections"] = new_sections
-    file_entry["last_updated"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    master["files"] = list(master_files.values())
+    save_master(master)
 
-# Save master.json
-with open(MASTER_JSON, "w", encoding="utf-8") as f:
-    json.dump(master_data, f, indent=2, ensure_ascii=False)
+def save_snapshot():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    snapshot_file = os.path.join(SNAPSHOT_DIR, f"{today}.json")
+    with open(MASTER_JSON, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    with open(snapshot_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# Daily snapshot
-today = datetime.utcnow().strftime("%Y-%m-%d")
-snapshot_file = os.path.join(SNAPSHOT_DIR, f"{today}.json")
-with open(snapshot_file, "w", encoding="utf-8") as f:
-    json.dump(master_data, f, indent=2, ensure_ascii=False)
-
-print(f"Updated master.json and snapshot {snapshot_file}")
+if __name__ == "__main__":
+    update_master()
+    save_snapshot()
